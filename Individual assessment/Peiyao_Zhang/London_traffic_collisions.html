@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8' />
+    <title>London Road Traffic Collisions (2017–2025)</title>
+    <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
+    <link href="https://api.mapbox.com/mapbox-gl-js/v3.17.0/mapbox-gl.css" rel="stylesheet">
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.17.0/mapbox-gl.js"></script>
+    <link href="London_traffic_collisions._styles.css" rel="stylesheet">
+</head>
+
+<body>
+
+<div id='map'></div>
+
+<div class='map-overlay'>
+    <h2>London Road Traffic Collisions (2017–2025)</h2>
+    <p>Data source: Transport for London (TfL), London Datastore, 
+       Data scale: Local Authority & MSOA & Collision Points </p>
+    
+    <div id="hover-info">
+        <h3 id="area-name" style="margin: 10px 0; font-size: 15px; color: #333;">Hover over an area</h3>
+        <div id="stats-content" style="display: none;">
+            <div class="data-item">Total Collsions: <span class="data-value" id="val-total"></span></div>
+            <div class="data-item">Fatal: <span class="data-value" id="val-fatal"></span></div>
+            <div class="data-item">Serious: <span class="data-value" id="val-serious"></span></div>
+            <div class="data-item">Slight: <span class="data-value" id="val-slight"></span></div>
+        </div>
+    </div>
+
+    <div id="severity-container" style="display: none;">
+        <strong>Filter Severity:</strong>
+        <select id="severity-select">
+            <option value="all">All Collisions</option>
+            <option value="Fatal">Fatal Only</option>
+            <option value="Serious">Serious Only</option>
+            <option value="Slight">Slight Only</option>
+        </select>
+    </div>
+</div>
+
+<div class="legend">
+    <h4>Collision Risk Density
+          (accidents per 10,000 people)</h4>
+    <div class="legend-bar"></div>
+    <div class="legend-labels">
+        <span>Less Dangerous</span>
+        <span>More Dangerous</span>
+    </div>
+</div>
+
+<script>
+    mapboxgl.accessToken = 'pk.eyJ1IjoiZnJhbmNlc2NhMDgzMSIsImEiOiJja3p3cjBtMWMxMTNnMnlwZzk0emt6bXBtIn0.LX7U-w8rgzZEJrRobaI8WQ';
+
+    var map = new mapboxgl.Map({
+        container: 'map',
+        style: 'mapbox://styles/francesca0831/cmlctk6wc000u01qt7w3c8n7e', 
+        center: [-0.1278, 51.5074],
+        zoom: 9,
+        hash: true
+    });
+
+    map.addControl(new mapboxgl.NavigationControl());
+    map.dragRotate.disable();
+    map.touchZoomRotate.disableRotation();
+
+    map.on('load', function() {
+
+
+        // 1. LAD Sensing layer
+        map.addLayer({
+            id: 'LocalAuthorities',
+            type: 'fill',
+            source: {
+                type: 'vector',
+                url: 'mapbox://francesca0831.77tau2oh'
+            },
+            'source-layer': 'LAD-2r1dhp',
+            'layout': {
+                'visibility': 'visible'
+            },
+            maxzoom: 10, 
+            paint: { 'fill-color': '#fff', 'fill-opacity': 0}
+        });
+
+        // 2. LAD Highlight
+        map.addLayer({
+            id: 'lahighlight',
+            type: 'line',
+            source: {
+                type: 'vector',
+                url: 'mapbox://francesca0831.77tau2oh'
+            },
+            'source-layer': 'LAD-2r1dhp',
+            paint: { 'line-color': '#00ffff', 'line-width': 3 },
+            filter: ['==', 'LAD24NM', 'empty']
+        });
+
+        // 3. MSOA Sensing layer
+        map.addLayer({
+            id: 'MSOA',
+            type: 'fill',
+            source: {
+                type: 'vector',
+                url: 'mapbox://francesca0831.bbxmfmlu' 
+            },
+            'source-layer': 'MSOA-25sfvi',
+            'layout': {
+                'visibility': 'visible'
+            },
+            minzoom: 10, 
+            paint: { 'fill-color': '#fff', 'fill-opacity': 0.01 }
+        });
+
+        // 4. MSOA Highlight
+        map.addLayer({
+            id: 'MSOAhighlight',
+            type: 'line',
+            source: {
+                type: 'vector',
+                url: 'mapbox://francesca0831.bbxmfmlu'
+            },
+            'source-layer': 'MSOA-25sfvi',
+            paint: { 'line-color': '#ffff00', 'line-width': 3 },
+            filter: ['==', 'MSOA21CD', 'empty']
+        });
+        
+        
+        map.moveLayer('LocalAuthorities');
+        map.moveLayer('MSOA');
+        map.moveLayer('lahighlight');
+        map.moveLayer('MSOAhighlight');
+
+        function numberWithCommas(x) {
+            if (!x) return "0";
+            return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        }
+
+        /* ---------- mousemove ---------- */
+        map.on('mousemove', function(e) {
+            var z = map.getZoom();
+            var la = [];
+            var msoal = [];
+
+            if (z < 10) {
+                la = map.queryRenderedFeatures(e.point, { layers: ['LocalAuthorities'] });
+            } else {
+                msoal = map.queryRenderedFeatures(e.point, { layers: ['MSOA'] });
+            }
+
+            var statsContent = document.getElementById('stats-content');
+            var areaName = document.getElementById('area-name');
+
+            if (msoal.length > 0) {
+                var p = msoal[0].properties;
+                map.setFilter('MSOAhighlight', ['==', 'MSOA21CD', p.MSOA21CD]);
+                map.setFilter('lahighlight', ['==', 'LAD24NM', 'empty']);
+
+                areaName.innerText = p.MSOA21NM || "MSOA Area";
+                statsContent.style.display = 'block';
+
+                document.getElementById('val-total').innerText = numberWithCommas(p.Collision_Count || 0);
+                document.getElementById('val-fatal').innerText = p.fatal || 0;
+                document.getElementById('val-serious').innerText = p.serious || 0;
+                document.getElementById('val-slight').innerText = p.slight || 0;
+                map.getCanvas().style.cursor = 'pointer';
+            } 
+            else if (la.length > 0) {
+                var p = la[0].properties;
+                map.setFilter('lahighlight', ['==', 'LAD24NM', p.LAD24NM]);
+                map.setFilter('MSOAhighlight', ['==', 'MSOA21CD', 'empty']);
+                
+                areaName.innerText = p.LAD24NM;
+                statsContent.style.display = 'block';
+
+                document.getElementById('val-total').innerText = numberWithCommas(p.Collision_Count || 0);
+                document.getElementById('val-fatal').innerText = p.fatal|| 0;
+                document.getElementById('val-serious').innerText = p.serious || 0;
+                document.getElementById('val-slight').innerText = p.slight || 0;
+                map.getCanvas().style.cursor = 'pointer';
+            }
+            else {
+                map.setFilter('lahighlight', ['==', 'LAD24NM', 'empty']);
+                map.setFilter('MSOAhighlight', ['==', 'MSOA21CD', 'empty']);
+                areaName.innerText = "Hover over an area";
+                statsContent.style.display = 'none';
+                map.getCanvas().style.cursor = '';
+            }
+        });
+
+        /* ---------- dropdown ---------- */
+        document.getElementById('severity-select').addEventListener('change', (e) => {
+            const value = e.target.value;
+            if (value === 'all') {
+                map.setFilter('collision-points-8bshhm', null);
+            } else {
+                map.setFilter('collision-points-8bshhm', ['==', ['get', 'Collision_Severity'], value]);
+            }
+        });
+
+        /* ---------- zoom ---------- */
+        map.on('zoom', function() {
+            var z = map.getZoom();
+
+    if (z < 10) {
+        map.setLayoutProperty('LAD-2r1dhp', 'visibility', 'visible'); 
+        map.setLayoutProperty('MSOA-25sfvi', 'visibility', 'none');    
+    } else {
+        map.setLayoutProperty('LAD-2r1dhp', 'visibility', 'none');
+        map.setLayoutProperty('MSOA-25sfvi', 'visibility', 'visible');
+    }
+
+            var container = document.getElementById('severity-container');
+            if (container) {
+                container.style.display = (z >= 13) ? 'block' : 'none';
+            }
+        });
+    });
+</script>
+
+</body>
+</html>
